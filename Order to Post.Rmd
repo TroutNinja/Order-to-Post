@@ -1,0 +1,219 @@
+---
+title: "Brandwise Batch Analysis - Order to Ship/Post"
+author: "Author: Matt Palmer"
+date: "1.9.22 - 2.1.22"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+---
+# Objective
+
+Examine the approximate time frame and summary statistics from order creation to posting for Brandwise batches printed (1.9.22 – 1.19.22) and shipped between (1.11.22 - 2.1.22). 
+
+- **Sample size** = 156 observations
+- **Number of observations excluded from batch data** = 53
+
+#### Configuration and Libraries
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300)
+rm(list = ls())
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(Hmisc)
+```
+
+#### Load Brandwise Batches 1/9/22 - 1/19/22
+
+```{r}
+orders <- read.csv('BrandWise_Batches_2201.csv', header = TRUE, sep = "," )
+#Drop 'X' and 'Credit Sheet' Columns
+
+print(colnames(orders))
+
+orders <- subset(orders, select = -c(7, 9))
+head(orders)
+```
+
+#### Summary of Data
+
+```{r}
+describe(orders) %>% html()
+```
+
+## Data Wrangling 
+
+#### Convert Columns to DT
+
+```{r}
+
+orders$Batch.Date <- as.POSIXct(orders$Batch.Date,
+                                format = "%m/%d/%y %H:%M")
+orders$Print.Date <- as.POSIXct(orders$Print.Date,
+                                format = "%m/%d/%y %H:%M")
+orders$Order.Date <- as.POSIXct(orders$Order.Date,
+                                format = "%d-%b-%y")
+```
+
+#### Convert Totals to Type = Double
+
+```{r}
+orders$Order.Total <- as.numeric(gsub("[\\$,]", "", orders$Order.Total))
+```
+
+#### Load Sales Order Data
+
+```{r}
+so_data <- read_excel("Sales Orders 22_0104-0119.xlsx")
+```
+
+#### Load Posted Sales Inovice Data
+
+```{r}
+posted <- read_excel("Posted Sales Invoices_1.1.22-2.3.22.xlsx")
+```
+
+#### Merge DataFrames
+
+```{r}
+df <- merge(orders, posted, by.x = c("P.O."), by.y = c("External Document No."), all.y = FALSE)
+df <- subset(select(df, -c("Currency Code")))
+head(df)
+```
+```{r}
+df <- merge(df, so_data, by.x = 'Order No.', by.y ='No.', all.y = FALSE)
+head(df)
+```
+#### Drop Missing Values
+
+```{r}
+rows_with_na <- df[rowSums(is.na(df)) > 0,]
+```
+
+```{r}
+df <- df %>% drop_na() # drop rows with missing data
+```
+
+#### Calculate Order-to-Ship (OTS), Ship-to-Post (STP), Order-to-Post
+
+```{r}
+df$Order_to_Ship <- difftime(df$`Shipment Date`, df$Order.Date, units = 'days') %>% as.numeric()
+df$Ship_to_Post <- difftime(df$`Posting Date`, df$'Shipment Date', units = 'days') %>% as.numeric()
+df$Order_to_Post <- difftime(df$`Posting Date`, df$Order.Date, units = 'days') %>% as.numeric()
+
+print(head(df[c("Order.Date", "Shipment Date", "Posting Date", "Order_to_Ship", "Ship_to_Post", "Order_to_Post")]))
+```
+
+## Analysis 
+#### Summary Statistics
+
+**Order to Ship**
+```{r}
+summary(df$Order_to_Ship)
+```
+**Ship to Post**
+```{r}
+summary(df$Ship_to_Post)
+```
+**Order to Post**
+```{r}
+summary(df$Order_to_Post)
+```
+
+#### Histograms
+
+```{r}
+library(ggplot2)
+library(hrbrthemes)
+
+x_bar_ots <- mean(df$Order_to_Ship)
+x_bar_stp <- mean(df$Ship_to_Post)
+x_bar_otp <- mean(df$Order_to_Post)
+
+ots_hist <- ggplot(data = df, aes(Order_to_Ship)) + 
+  geom_histogram(binwidth = 1, color = 'white', fill = '#69b3a2') +
+  geom_vline(xintercept = x_bar_ots, show.legend = TRUE, color = 'red') +
+  ggtitle("Distribution of Order-to-Ship") +
+  labs(x = 'Days', y = 'Count') +
+  scale_x_continuous(breaks=seq(0, 30, 2)) +
+  theme(
+    plot.title = element_text(size=12)
+    )
+
+stp_hist <- ggplot(data = df, aes(Ship_to_Post)) + 
+  geom_histogram(binwidth = 1, color = 'white', fill = 'orchid3') +
+  geom_vline(xintercept = x_bar_stp, show.legend = TRUE, color = 'red') +
+  ggtitle("Distribution of Ship-to-Post") +
+  labs(x = 'Days', y = 'Count') +
+  scale_x_continuous(breaks=seq(0, 30, 2)) +
+  theme(
+    plot.title = element_text(size=12)
+    )
+
+otp_hist <- ggplot(data = df, aes(Order_to_Post)) +
+  geom_histogram(binwidth = 1, color = 'white', fill = 'orange2') +
+  geom_vline(xintercept = x_bar_otp, show.legend = TRUE, color = 'red') +
+  ggtitle("Distribution of Order-to-Post") +
+  labs(x = 'Days', y = 'Count') +
+  scale_x_continuous(breaks=seq(0, 30, 2)) +
+  theme(
+    plot.title = element_text(size=12)
+    )
+
+require(gridExtra)
+
+grid.arrange(ots_hist, stp_hist, otp_hist, ncol=2)
+```
+
+Based on the histograms, we see slightly positive (right skewed) distributions for all three metrics OTS, STP, OTP. The vertical red line shows the arithmetic mean (average) for the distribution. An interesting note is that it takes about as long on average to post an invoice as it does to ship an order.
+
+#### Scatter Plot
+
+```{r}
+ggplot(df, aes(x=Order_to_Ship, y=Amount)) + geom_point(aes(color = 'red')) +
+  ggtitle("Days vs Order Amount") +
+  labs(x = 'Days', y = 'Amount') +
+  theme(legend.position = 'none') +
+  scale_x_continuous(breaks=seq(0, 30, 2)) +
+  theme(
+    plot.title = element_text(size=12)
+    )
+```
+
+The scatter plot comparing Order-to-Ship vs Order Amount shows no real pattern based on order size. Large orders take approximately the same amount of time to ship as small orders.
+
+#### Box Plots
+
+```{r}
+ggplot(df, aes(x=factor(BatchID), y=Order_to_Ship)) + 
+  geom_boxplot(fill = "cadetblue3") +
+  ggtitle("Order to Ship (OTS) - Spread and Skewness") +
+  labs(x = 'Batch ID', y = 'Days')+
+  scale_y_continuous(breaks=seq(0, 30, 5))
+```
+
+Box plots help us examine the interquartile range and median values for Order-to-Ship (OTS) over the sample time period. The first set of box plots show relatively stable variance, trending upwards slightly as we moved further away from the holidays. One interesting note, the first batch 3960122 took several days from order to batch so it's a bit surprising to see such fast ship times for this group.
+
+```{r}
+ggplot(df, aes(x=factor(BatchID), y=Order_to_Post)) + 
+  geom_boxplot(fill = "tomato2") +
+  ggtitle("Order to Post (OTP) - Spread and Skewness") +
+  labs(x = 'Batch ID', y = 'Days') +
+  scale_y_continuous(breaks=seq(0, 30, 5))
+```
+
+Order-to-Post times showed a downward trend over the time period examined and seemed to stabilized around 16 days on average.
+
+# Conclusion 
+Based on a sample of 156 Brandwise batches received between 1/9 - 1/19, orders take approximately 7.8 days on average from order entry in Brandwise to ship. They take an additional 8.2 days on average to post. The time from order creation to posted invoice takes an average of 16 days. I was unable to identify a noticeable pattern based on order size.
+
+# Recomendations
+1. Examine the process from shipment to posted invoice and find ways to reduce this interval.
+
+2. Try to identify the underlying cause for the orders that took longer than 15 days to ship.
+
+
