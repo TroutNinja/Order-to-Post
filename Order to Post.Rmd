@@ -209,7 +209,7 @@ ggplot(df, aes(x=factor(BatchID), y=Order_to_Post)) +
 Order-to-Post times showed a downward trend over the time period examined and seemed to stabilized around 16 days on average.
 
 # Conclusion 
-Based on a sample of 156 Brandwise batches received between 1/9 - 1/19, orders take approximately 7.8 days on average from order entry in Brandwise to ship. They take an additional 8.2 days on average to post. The time from order creation to posted invoice takes an average of 16 days. I was unable to identify a noticeable pattern based on order size.
+Based on a sample of 156 Brandwise batches received between 1/9 - 1/19, orders take approximately 7.8 days on average from order entry in Brandwise to ship. They take an additional 8.2 days on average to post. The time from order creation to posted invoice takes an average of 16 days. I was unable to identify a noticeable pattern based on order size from this sample.
 
 # Recomendations
 1. Examine the process from shipment to posted invoice and find ways to reduce this interval.
