@@ -25,6 +25,7 @@ library(tidyverse)
 library(dplyr)
 library(readxl)
 library(Hmisc)
+library(rmarkdown)
 ```
 
 #### Load Brandwise Batches 1/9/22 - 1/19/22
